@@ -31,6 +31,26 @@ if (-not (Test-Path "SUMMARY.md")) {
     throw "SUMMARY.md not found."
 }
 
+# Use the original cover image shipped in the author's repository.
+$coverPath = Join-Path $work "contents\images\mlib-cover.png"
+if (-not (Test-Path $coverPath)) {
+    throw "Book cover not found at contents/images/mlib-cover.png."
+}
+
+# README already displays the same cover image at the top. Build a temporary
+# Kindle copy without that first image so the EPUB does not show the cover twice.
+$kindleReadme = "README-kindle.md"
+if (Test-Path "README.md") {
+    $readme = Get-Content "README.md" -Raw
+    $readme = [regex]::Replace(
+        $readme,
+        '(?s)^\s*<p\s+align="center">\s*<img[^>]*mlib-cover\.png[^>]*/?>\s*</p>\s*',
+        ''
+    )
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText((Join-Path $work $kindleReadme), $readme, $utf8NoBom)
+}
+
 # Parse Markdown file paths from GitBook/HonKit SUMMARY.md in reading order.
 $summary = Get-Content "SUMMARY.md" -Raw
 $matches = [regex]::Matches($summary, '\[[^\]]+\]\(([^)]+\.md)\)')
@@ -45,9 +65,14 @@ foreach ($m in $matches) {
     }
 }
 
-# Include README as the opening page if SUMMARY doesn't already point to it.
+# Include the introduction as the opening content page, but without duplicating
+# the cover image that Pandoc will embed as the EPUB's formal cover.
 $inputs = @()
-if (Test-Path "README.md") { $inputs += "README.md" }
+if (Test-Path $kindleReadme) {
+    $inputs += $kindleReadme
+} elseif (Test-Path "README.md") {
+    $inputs += "README.md"
+}
 $inputs += $files | Select-Object -Unique
 
 if ($inputs.Count -lt 2) {
@@ -95,7 +120,9 @@ function Math(el)
 end
 '@
 $mathFilterPath = Join-Path $work "fix-multiline-math.lua"
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+if (-not $utf8NoBom) {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+}
 [System.IO.File]::WriteAllText($mathFilterPath, $mathFilter, $utf8NoBom)
 
 # Pandoc resolves image paths relative to its working directory, while this book
@@ -123,6 +150,7 @@ $args = @(
     "--toc-depth=3",
     "--mathml",
     "--lua-filter=$mathFilterPath",
+    "--epub-cover-image=$coverPath",
     "--metadata=title:Machine Learning Interviews",
     "--metadata=author:Chip Huyen",
     "--metadata=language:en-US",
@@ -144,5 +172,6 @@ if (-not (Test-Path $Output)) {
 Write-Host ""
 Write-Host "Done:" -ForegroundColor Green
 Write-Host $Output
+Write-Host "Cover: contents/images/mlib-cover.png"
 Write-Host ""
 Write-Host "Next: upload the EPUB at https://www.amazon.com/sendtokindle"

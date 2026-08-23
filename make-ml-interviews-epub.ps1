@@ -67,19 +67,29 @@ foreach ($m in $matches) {
 }
 $files = $files | Select-Object -Unique
 
-# Normalize the author's tree-emoji Tip markers for e-readers. Some Kindle
-# fonts render the tree emoji as tofu boxes. Use the plain-text label "TIP"
-# instead; the callout remains visually distinct through CSS, without relying
-# on color, emoji support, or an embedded font.
-$tree = [System.Char]::ConvertFromUtf32(0x1F333)
-$escapedTree = [regex]::Escape($tree)
-$tipPattern = '(?m)^>\s*' + $escapedTree + '\s*\*\*Tip\*\*\s*' + $escapedTree + '\s*<br>\s*$'
+# The source uses several paired emoji as decorative callout markers. Some
+# Kindle fonts render these as tofu boxes. Normalize the known callout families
+# to semantic plain-text labels and use color only as an enhancement. The labels
+# still carry all meaning on monochrome devices.
+$tree = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F333))      # tree
+$wave = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F30A))      # water wave
+$person = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F471))    # blond person
+$warning = [regex]::Escape([System.Char]::ConvertFromUtf32(0x26A0))    # warning sign
+
+$tipPattern = '(?m)^>\s*' + $tree + '\s*\*\*Tip\*\*\s*' + $tree + '\s*<br>\s*$'
+$resourcesPattern = '(?m)^>\s*' + $wave + '\s*\*\*Resources\*\*\s*' + $wave + '\s*$'
+$storyPattern = '(?m)^\*\*\s*' + $person + '\s*Personal story\s*' + $person + '\s*\*\*\s*$'
+$ambiguityPattern = '(?m)^>\s*<span[^>]*>\s*' + $warning + '\s*Ambiguity\s*' + $warning + '\s*</span>\s*<br>\s*$'
 
 foreach ($file in $files) {
     if ($file -ieq "README.md") { continue }
     $fullFile = Join-Path $work $file
     $source = Get-Content $fullFile -Raw -Encoding UTF8
-    $normalized = [regex]::Replace($source, $tipPattern, '> **TIP**<br>')
+    $normalized = $source
+    $normalized = [regex]::Replace($normalized, $tipPattern, '> <span class="callout-label callout-tip"><strong>TIP</strong></span><br>')
+    $normalized = [regex]::Replace($normalized, $resourcesPattern, '> <span class="callout-label callout-resources"><strong>RESOURCES</strong></span>')
+    $normalized = [regex]::Replace($normalized, $storyPattern, '<p class="callout-heading callout-story"><strong>PERSONAL STORY</strong></p>')
+    $normalized = [regex]::Replace($normalized, $ambiguityPattern, '> <span class="callout-label callout-ambiguity"><strong>AMBIGUITY</strong></span><br>')
     if ($normalized -ne $source) {
         [System.IO.File]::WriteAllText($fullFile, $normalized, $utf8NoBom)
     }
@@ -116,8 +126,9 @@ if ($inputs.Count -lt 2) {
     throw "Could not determine book chapter order from SUMMARY.md."
 }
 
-# Kindle-friendly CSS. Tip callouts use only typography and a current-color
-# border, so they remain clear on both color and monochrome e-ink displays.
+# Kindle-friendly CSS. Colors are deliberately dark and moderately saturated so
+# they remain legible on color e-ink. On monochrome devices, the explicit text
+# labels and typography still distinguish every callout without relying on hue.
 $css = @'
 body {
   line-height: 1.45;
@@ -142,8 +153,26 @@ blockquote {
   padding-left: 0.8em;
   border-left: 0.18em solid currentColor;
 }
-blockquote > p:first-child strong {
+.callout-label,
+.callout-heading {
+  font-weight: bold;
   letter-spacing: 0.04em;
+}
+.callout-heading {
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+}
+.callout-tip {
+  color: #2f6b3c;
+}
+.callout-resources {
+  color: #2f5f8f;
+}
+.callout-story {
+  color: #6b4f8a;
+}
+.callout-ambiguity {
+  color: #8b3a3a;
 }
 '@
 $cssPath = Join-Path $work "kindle.css"

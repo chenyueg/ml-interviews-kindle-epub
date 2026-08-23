@@ -61,9 +61,11 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - includes each source directory in Pandoc's resource path so local images resolve correctly;
 - converts LaTeX math to EPUB3 MathML;
 - uses a small temporary Pandoc Lua filter to normalize multiline display equations;
-- replaces paired decorative emoji in the book's callout headings with Kindle-safe text labels;
+- normalizes both common Markdown spellings of paired decorative emoji callout headings, including variants such as `Tip for engineers...`;
 - gives `TIP`, `RESOURCES`, `PERSONAL STORY`, and `AMBIGUITY` distinct dark colors on color Kindle models;
 - keeps every callout understandable on monochrome Kindle models because color is only an enhancement, not the only cue;
+- keeps ordinary blockquotes borderless so sections that use many consecutive quoted paragraphs do not turn into a stack of vertical rules;
+- preserves external hyperlinks while removing Kindle's heavy full-sentence underlining and using restrained link color instead;
 - adds conservative reflowable CSS suitable for Kindle;
 - retains the original book title and author metadata.
 
@@ -85,11 +87,13 @@ on color Kindle models; the hierarchy still works in monochrome.
 
 ## Callout styling
 
-The source book uses paired emoji around several recurring labels. Some Kindle
-fonts display those emoji as square "tofu" boxes, so the build normalizes them to
-plain text and adds restrained color:
+The source book uses paired emoji around several recurring labels and does not use
+exactly one Markdown spelling everywhere. For example, a label may appear as
+`🌳 **Tip** 🌳`, `**👱 Personal story 👱**`, or as the same construct inside a
+blockquote and followed by `<br>`. Some Kindle fonts display those emoji as square
+"tofu" boxes, so the build recognizes both major forms and normalizes them to text.
 
-- `TIP` — dark green;
+- `TIP` and longer `Tip for ...` variants — dark green;
 - `RESOURCES` — dark blue;
 - `PERSONAL STORY` — dark purple;
 - `AMBIGUITY` — dark red.
@@ -97,6 +101,17 @@ plain text and adds restrained color:
 The palette is intentionally dark and moderately saturated for color e-ink. On a
 monochrome Kindle, the labels remain bold text and therefore do not depend on hue
 to carry meaning.
+
+## Blockquotes and links
+
+The source occasionally uses blockquotes for several consecutive prose paragraphs.
+A generic left-border style therefore produces many repeated vertical rules on a
+Kindle page. This helper keeps blockquotes slightly indented but borderless.
+
+The source also sometimes wraps a full sentence in an external hyperlink. Kindle's
+default styling may underline every word in that sentence, which is visually heavy
+on e-ink. Links remain clickable, but the helper uses restrained link color instead
+of full underlining.
 
 ## Troubleshooting
 
@@ -119,8 +134,8 @@ navigation structure, not book numbering. The current stylesheet removes them.
 
 If callout headings such as `Tip`, `Resources`, or `Personal story` appeared with
 square boxes on Kindle, those boxes were unsupported decorative emoji from the
-source Markdown. The current build replaces the decorative markers while keeping
-the semantic label.
+source Markdown. The current build recognizes the blockquoted and standalone
+variants rather than assuming one exact spelling.
 
 Some unusual formulas may still render differently after Amazon's Kindle
 conversion, but ordinary fractions, matrices, and multiline equations should be

@@ -54,16 +54,30 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - reads `SUMMARY.md` to preserve the GitBook/HonKit chapter order;
 - builds from the Markdown source rather than scraping rendered web pages;
 - creates EPUB3 with a clickable table of contents;
-- preserves local images where Pandoc can resolve them;
+- includes each source directory in Pandoc's resource path so local images resolve correctly;
+- converts LaTeX math to EPUB3 MathML;
+- uses a small temporary Pandoc Lua filter to normalize multiline display equations;
 - adds conservative reflowable CSS suitable for Kindle;
 - retains the original book title and author metadata.
 
-## Notes
+## Troubleshooting
 
-Some formulas or images may render differently depending on Pandoc and Kindle's
-conversion pipeline. The helper uses `gfm+tex_math_dollars` and EPUB3, which works
-reasonably well for the source format but does not guarantee pixel-perfect
-rendering.
+If you previously saw many warnings such as:
+
+```text
+Could not fetch resource images/image18.png
+Could not convert TeX math ... rendering as TeX
+```
+
+update to the latest version of the script. The image warnings were caused by
+Pandoc resolving `images/...` relative to the repository root instead of the
+Markdown files under `contents/`. The math warnings were caused by EPUB output
+not explicitly using MathML plus a few display equations containing bare LaTeX
+line breaks.
+
+Some unusual formulas may still render differently after Amazon's Kindle
+conversion, but ordinary fractions, matrices, and multiline equations should be
+preserved much more reliably.
 
 ## Copyright
 

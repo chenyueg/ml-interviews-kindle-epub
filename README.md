@@ -59,10 +59,26 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - includes each source directory in Pandoc's resource path so local images resolve correctly;
 - converts LaTeX math to EPUB3 MathML;
 - uses a small temporary Pandoc Lua filter to normalize multiline display equations;
-- normalizes the original tree-emoji Tip markers to plain `TIP` labels so they render cleanly on both color and monochrome Kindle models;
-- styles blockquotes with a simple current-color left border, requiring neither emoji fonts nor color support;
+- replaces paired decorative emoji in the book's callout headings with Kindle-safe text labels;
+- gives `TIP`, `RESOURCES`, `PERSONAL STORY`, and `AMBIGUITY` distinct dark colors on color Kindle models;
+- keeps every callout understandable on monochrome Kindle models because color is only an enhancement, not the only cue;
 - adds conservative reflowable CSS suitable for Kindle;
 - retains the original book title and author metadata.
+
+## Callout styling
+
+The source book uses paired emoji around several recurring labels. Some Kindle
+fonts display those emoji as square "tofu" boxes, so the build normalizes them to
+plain text and adds restrained color:
+
+- `TIP` — dark green;
+- `RESOURCES` — dark blue;
+- `PERSONAL STORY` — dark purple;
+- `AMBIGUITY` — dark red.
+
+The palette is intentionally dark and moderately saturated for color e-ink. On a
+monochrome Kindle, the labels remain bold text and therefore do not depend on hue
+to carry meaning.
 
 ## Troubleshooting
 
@@ -79,10 +95,10 @@ Markdown files under `contents/`. The math warnings were caused by EPUB output
 not explicitly using MathML plus a few display equations containing bare LaTeX
 line breaks.
 
-If `Tip` headings appeared with square "tofu" boxes on Kindle, those boxes were
-the original tree emoji characters. The current build replaces only that Tip
-marker with a plain-text label and uses typography plus a left border for the
-callout instead.
+If callout headings such as `Tip`, `Resources`, or `Personal story` appeared with
+square boxes on Kindle, those boxes were unsupported decorative emoji from the
+source Markdown. The current build replaces the decorative markers while keeping
+the semantic label.
 
 Some unusual formulas may still render differently after Amazon's Kindle
 conversion, but ordinary fractions, matrices, and multiline equations should be

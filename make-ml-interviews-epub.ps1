@@ -37,8 +37,10 @@ if (-not (Test-Path $coverPath)) {
     throw "Book cover not found at contents/images/mlib-cover.png."
 }
 
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 # README already displays the same cover image at the top. Build a temporary
-# Kindle copy without that first image so the EPUB does not show the cover twice.
+# Kindle copy without that first image so the formal EPUB cover is not repeated.
 $kindleReadme = "README-kindle.md"
 if (Test-Path "README.md") {
     $readme = Get-Content "README.md" -Raw
@@ -47,11 +49,10 @@ if (Test-Path "README.md") {
         '(?s)^\s*<p\s+align="center">\s*<img[^>]*mlib-cover\.png[^>]*/?>\s*</p>\s*',
         ''
     )
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText((Join-Path $work $kindleReadme), $readme, $utf8NoBom)
 }
 
-# Parse Markdown file paths from GitBook/HonKit SUMMARY.md in reading order.
+# Parse Markdown paths from GitBook/HonKit SUMMARY.md in reading order.
 $summary = Get-Content "SUMMARY.md" -Raw
 $matches = [regex]::Matches($summary, '\[[^\]]+\]\(([^)]+\.md)\)')
 $files = @()
@@ -64,22 +65,40 @@ foreach ($m in $matches) {
         $files += $p
     }
 }
+$files = $files | Select-Object -Unique
 
-# Include the introduction as the opening content page, but without duplicating
-# the cover image that Pandoc will embed as the EPUB's formal cover.
+# SUMMARY.md already contains README.md as the Introduction. Replace that entry
+# with our cover-free temporary README instead of prepending another README.
 $inputs = @()
-if (Test-Path $kindleReadme) {
-    $inputs += $kindleReadme
-} elseif (Test-Path "README.md") {
-    $inputs += "README.md"
+$summaryHadReadme = $false
+foreach ($file in $files) {
+    if ($file -ieq "README.md") {
+        $summaryHadReadme = $true
+        if (Test-Path $kindleReadme) {
+            $inputs += $kindleReadme
+        } else {
+            $inputs += "README.md"
+        }
+    } else {
+        $inputs += $file
+    }
 }
-$inputs += $files | Select-Object -Unique
+
+# Defensive fallback for future upstream SUMMARY changes.
+if (-not $summaryHadReadme) {
+    if (Test-Path $kindleReadme) {
+        $inputs = @($kindleReadme) + $inputs
+    } elseif (Test-Path "README.md") {
+        $inputs = @("README.md") + $inputs
+    }
+}
+$inputs = $inputs | Select-Object -Unique
 
 if ($inputs.Count -lt 2) {
     throw "Could not determine book chapter order from SUMMARY.md."
 }
 
-# Kindle-friendly CSS: intentionally conservative so Kindle can reflow cleanly.
+# Kindle-friendly CSS.
 $css = @'
 body {
   line-height: 1.45;
@@ -104,11 +123,10 @@ blockquote {
 }
 '@
 $cssPath = Join-Path $work "kindle.css"
-Set-Content -Path $cssPath -Value $css -Encoding UTF8
+[System.IO.File]::WriteAllText($cssPath, $css, $utf8NoBom)
 
-# Pandoc's MathML conversion handles ordinary LaTeX well, but display equations
-# that use bare \\ line breaks need an alignment environment. This filter wraps
-# only those display-math blocks that are not already inside a LaTeX environment.
+# Wrap bare multiline display equations in an alignment environment so Pandoc's
+# MathML converter can handle them reliably.
 $mathFilter = @'
 function Math(el)
   if el.mathtype == 'DisplayMath'
@@ -120,14 +138,10 @@ function Math(el)
 end
 '@
 $mathFilterPath = Join-Path $work "fix-multiline-math.lua"
-if (-not $utf8NoBom) {
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-}
 [System.IO.File]::WriteAllText($mathFilterPath, $mathFilter, $utf8NoBom)
 
-# Pandoc resolves image paths relative to its working directory, while this book
-# contains references such as images/image18.png from Markdown files under
-# contents/. Include the root plus every input file's directory in resource-path.
+# Include the repo root plus every input file's directory so references such as
+# images/image18.png resolve correctly from Markdown files under contents/.
 $resourceDirs = @($work)
 foreach ($input in $inputs) {
     $fullInput = Join-Path $work $input

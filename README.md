@@ -52,6 +52,8 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 
 - clones Chip Huyen's public `ml-interviews-book` repository;
 - reads `SUMMARY.md` to preserve the GitBook/HonKit chapter order;
+- uses the original `contents/images/mlib-cover.png` as the EPUB cover;
+- removes the duplicate cover image from the temporary README used as the opening content page;
 - builds from the Markdown source rather than scraping rendered web pages;
 - creates EPUB3 with a clickable table of contents;
 - includes each source directory in Pandoc's resource path so local images resolve correctly;

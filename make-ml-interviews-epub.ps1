@@ -43,7 +43,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # Kindle copy without that first image so the formal EPUB cover is not repeated.
 $kindleReadme = "README-kindle.md"
 if (Test-Path "README.md") {
-    $readme = Get-Content "README.md" -Raw
+    $readme = Get-Content "README.md" -Raw -Encoding UTF8
     $readme = [regex]::Replace(
         $readme,
         '(?s)^\s*<p\s+align="center">\s*<img[^>]*mlib-cover\.png[^>]*/?>\s*</p>\s*',
@@ -53,7 +53,7 @@ if (Test-Path "README.md") {
 }
 
 # Parse Markdown paths from GitBook/HonKit SUMMARY.md in reading order.
-$summary = Get-Content "SUMMARY.md" -Raw
+$summary = Get-Content "SUMMARY.md" -Raw -Encoding UTF8
 $matches = [regex]::Matches($summary, '\[[^\]]+\]\(([^)]+\.md)\)')
 $files = @()
 
@@ -66,6 +66,24 @@ foreach ($m in $matches) {
     }
 }
 $files = $files | Select-Object -Unique
+
+# Normalize the author's tree-emoji Tip markers for e-readers. Some Kindle
+# fonts render the tree emoji as tofu boxes. Use the plain-text label "TIP"
+# instead; the callout remains visually distinct through CSS, without relying
+# on color, emoji support, or an embedded font.
+$tree = [System.Char]::ConvertFromUtf32(0x1F333)
+$escapedTree = [regex]::Escape($tree)
+$tipPattern = '(?m)^>\s*' + $escapedTree + '\s*\*\*Tip\*\*\s*' + $escapedTree + '\s*<br>\s*$'
+
+foreach ($file in $files) {
+    if ($file -ieq "README.md") { continue }
+    $fullFile = Join-Path $work $file
+    $source = Get-Content $fullFile -Raw -Encoding UTF8
+    $normalized = [regex]::Replace($source, $tipPattern, '> **TIP**<br>')
+    if ($normalized -ne $source) {
+        [System.IO.File]::WriteAllText($fullFile, $normalized, $utf8NoBom)
+    }
+}
 
 # SUMMARY.md already contains README.md as the Introduction. Replace that entry
 # with our cover-free temporary README instead of prepending another README.
@@ -98,7 +116,8 @@ if ($inputs.Count -lt 2) {
     throw "Could not determine book chapter order from SUMMARY.md."
 }
 
-# Kindle-friendly CSS.
+# Kindle-friendly CSS. Tip callouts use only typography and a current-color
+# border, so they remain clear on both color and monochrome e-ink displays.
 $css = @'
 body {
   line-height: 1.45;
@@ -118,8 +137,13 @@ img {
   height: auto;
 }
 blockquote {
-  margin-left: 1em;
+  margin-left: 0;
   margin-right: 0;
+  padding-left: 0.8em;
+  border-left: 0.18em solid currentColor;
+}
+blockquote > p:first-child strong {
+  letter-spacing: 0.04em;
 }
 '@
 $cssPath = Join-Path $work "kindle.css"

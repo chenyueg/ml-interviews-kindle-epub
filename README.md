@@ -55,7 +55,9 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - uses the original `contents/images/mlib-cover.png` as the EPUB cover;
 - removes the duplicate cover image from the temporary README used as the opening content page;
 - builds from the Markdown source rather than scraping rendered web pages;
-- creates EPUB3 with a clickable table of contents;
+- creates EPUB3 with a clickable three-level table of contents;
+- suppresses EPUB ordered-list markers in the TOC so Kindle does not show misleading auto-generated numbers next to the book's own section numbers;
+- gives the TOC a book-like hierarchy: top-level parts, chapters, then sections;
 - includes each source directory in Pandoc's resource path so local images resolve correctly;
 - converts LaTeX math to EPUB3 MathML;
 - uses a small temporary Pandoc Lua filter to normalize multiline display equations;
@@ -64,6 +66,22 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - keeps every callout understandable on monochrome Kindle models because color is only an enhancement, not the only cue;
 - adds conservative reflowable CSS suitable for Kindle;
 - retains the original book title and author metadata.
+
+## Table of contents
+
+The EPUB keeps three TOC levels so it stays useful rather than becoming an
+exhaustive wall of links: top-level book parts, chapters, and major numbered
+sections. The source headings already contain meaningful numbering such as `1.1`,
+`2.3`, and `5.2`.
+
+EPUB3 navigation is structurally represented with an ordered list (`<ol>`).
+Pandoc's default EPUB stylesheet normally hides those list markers, but supplying
+a custom `--css` means that default TOC styling is no longer present. Without an
+explicit replacement, Kindle may display unrelated `1, 2, 3...` list numbers in
+front of each TOC link. This helper restores that behavior robustly by suppressing
+markers and forcing TOC list items to ordinary blocks, while using indentation and
+font weight for hierarchy. Top-level entries receive a restrained dark-blue accent
+on color Kindle models; the hierarchy still works in monochrome.
 
 ## Callout styling
 
@@ -94,6 +112,10 @@ Pandoc resolving `images/...` relative to the repository root instead of the
 Markdown files under `contents/`. The math warnings were caused by EPUB output
 not explicitly using MathML plus a few display equations containing bare LaTeX
 line breaks.
+
+If every TOC hyperlink previously had an extra number that did not match the
+chapter or section number, those were ordered-list markers from the EPUB
+navigation structure, not book numbering. The current stylesheet removes them.
 
 If callout headings such as `Tip`, `Resources`, or `Personal story` appeared with
 square boxes on Kindle, those boxes were unsupported decorative emoji from the

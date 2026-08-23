@@ -20,7 +20,10 @@ $work = Join-Path $env:TEMP "ml-interviews-book-kindle"
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 
 Write-Host "Cloning Chip Huyen's public repository..."
-git clone --depth 1 https://github.com/chiphuyen/ml-interviews-book.git $work
+& git clone --depth 1 https://github.com/chiphuyen/ml-interviews-book.git $work
+if ($LASTEXITCODE -ne 0) {
+    throw "git clone failed with exit code $LASTEXITCODE."
+}
 
 Set-Location $work
 
@@ -78,6 +81,34 @@ blockquote {
 $cssPath = Join-Path $work "kindle.css"
 Set-Content -Path $cssPath -Value $css -Encoding UTF8
 
+# Pandoc's MathML conversion handles ordinary LaTeX well, but display equations
+# that use bare \\ line breaks need an alignment environment. This filter wraps
+# only those display-math blocks that are not already inside a LaTeX environment.
+$mathFilter = @'
+function Math(el)
+  if el.mathtype == 'DisplayMath'
+      and el.text:match('\\\\')
+      and not el.text:match('\\begin%s*{') then
+    el.text = '\\begin{aligned}\n' .. el.text .. '\n\\end{aligned}'
+  end
+  return el
+end
+'@
+$mathFilterPath = Join-Path $work "fix-multiline-math.lua"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($mathFilterPath, $mathFilter, $utf8NoBom)
+
+# Pandoc resolves image paths relative to its working directory, while this book
+# contains references such as images/image18.png from Markdown files under
+# contents/. Include the root plus every input file's directory in resource-path.
+$resourceDirs = @($work)
+foreach ($input in $inputs) {
+    $fullInput = Join-Path $work $input
+    $parent = Split-Path -Parent $fullInput
+    if ($parent) { $resourceDirs += $parent }
+}
+$resourcePath = ($resourceDirs | Select-Object -Unique) -join [IO.Path]::PathSeparator
+
 $outDir = Split-Path -Parent $Output
 if ($outDir -and -not (Test-Path $outDir)) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
@@ -90,16 +121,21 @@ $args = @(
     "--standalone",
     "--toc",
     "--toc-depth=3",
+    "--mathml",
+    "--lua-filter=$mathFilterPath",
     "--metadata=title:Machine Learning Interviews",
     "--metadata=author:Chip Huyen",
     "--metadata=language:en-US",
     "--css=$cssPath",
-    "--resource-path=$work",
+    "--resource-path=$resourcePath",
     "--output=$Output"
 )
 $args += $inputs
 
 & pandoc @args
+if ($LASTEXITCODE -ne 0) {
+    throw "Pandoc failed with exit code $LASTEXITCODE."
+}
 
 if (-not (Test-Path $Output)) {
     throw "Pandoc completed but EPUB was not created."

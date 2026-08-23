@@ -67,29 +67,49 @@ foreach ($m in $matches) {
 }
 $files = $files | Select-Object -Unique
 
-# The source uses several paired emoji as decorative callout markers. Some
-# Kindle fonts render these as tofu boxes. Normalize the known callout families
-# to semantic plain-text labels and use color only as an enhancement. The labels
-# still carry all meaning on monochrome devices.
+# The source uses several paired emoji as decorative callout markers, with more
+# than one Markdown spelling (emoji outside bold text, emoji inside bold text,
+# blockquoted or standalone, sometimes followed by <br>). Some Kindle fonts
+# render those emoji as tofu boxes. Normalize every known callout family while
+# preserving variable labels such as "Tip for engineers early in your careers".
+# The script source itself uses Unicode code points rather than literal emoji so
+# Windows PowerShell 5.1 does not depend on the script file's BOM for parsing.
 $tree = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F333))       # tree
 $wave = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F30A))       # water wave
 $person = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F471))     # blond person
 $warning = [regex]::Escape([System.Char]::ConvertFromUtf32(0x26A0))     # warning sign
 
-$tipPattern = '(?m)^>\s*' + $tree + '\s*\*\*Tip\*\*\s*' + $tree + '\s*<br>\s*$'
-$resourcesPattern = '(?m)^>\s*' + $wave + '\s*\*\*Resources\*\*\s*' + $wave + '\s*$'
-$storyPattern = '(?m)^\*\*\s*' + $person + '\s*Personal story\s*' + $person + '\s*\*\*\s*$'
-$ambiguityPattern = '(?m)^>\s*<span[^>]*>\s*' + $warning + '\s*Ambiguity\s*' + $warning + '\s*</span>\s*<br>\s*$'
+# Form A: > emoji **Label** emoji<br>
+# Form B: > **emoji Label emoji**<br>
+# The optional quote capture is preserved, so the source's semantic blockquote
+# remains intact while the unsupported decorative glyphs disappear.
+$tipInnerPattern = '(?m)^(?<quote>>\s*)?' + $tree + '\s*\*\*(?<label>Tip[^*\r\n<]*?)\*\*\s*' + $tree + '\s*(?<br><br>)?\s*$'
+$tipOuterPattern = '(?m)^(?<quote>>\s*)?\*\*\s*' + $tree + '\s*(?<label>Tip[^*\r\n<]*?)\s*' + $tree + '\s*\*\*\s*(?<br><br>)?\s*$'
+$resourcesInnerPattern = '(?m)^(?<quote>>\s*)?' + $wave + '\s*\*\*(?<label>Resources)\*\*\s*' + $wave + '\s*(?<br><br>)?\s*$'
+$resourcesOuterPattern = '(?m)^(?<quote>>\s*)?\*\*\s*' + $wave + '\s*(?<label>Resources)\s*' + $wave + '\s*\*\*\s*(?<br><br>)?\s*$'
+$storyInnerPattern = '(?m)^(?<quote>>\s*)?' + $person + '\s*\*\*(?<label>Personal story)\*\*\s*' + $person + '\s*(?<br><br>)?\s*$'
+$storyOuterPattern = '(?m)^(?<quote>>\s*)?\*\*\s*' + $person + '\s*(?<label>Personal story)\s*' + $person + '\s*\*\*\s*(?<br><br>)?\s*$'
+$ambiguityPattern = '(?m)^(?<quote>>\s*)?<span[^>]*>\s*' + $warning + '\s*(?<label>Ambiguity)\s*' + $warning + '\s*</span>\s*(?<br><br>)?\s*$'
+
+$tipReplacement = '${quote}<span class="callout-label callout-tip"><strong>${label}</strong></span>${br}'
+$resourcesReplacement = '${quote}<span class="callout-label callout-resources"><strong>${label}</strong></span>${br}'
+$storyReplacement = '${quote}<span class="callout-label callout-story"><strong>${label}</strong></span>${br}'
+$ambiguityReplacement = '${quote}<span class="callout-label callout-ambiguity"><strong>${label}</strong></span>${br}'
 
 foreach ($file in $files) {
     if ($file -ieq "README.md") { continue }
     $fullFile = Join-Path $work $file
     $source = Get-Content $fullFile -Raw -Encoding UTF8
     $normalized = $source
-    $normalized = [regex]::Replace($normalized, $tipPattern, '> <span class="callout-label callout-tip"><strong>TIP</strong></span><br>')
-    $normalized = [regex]::Replace($normalized, $resourcesPattern, '> <span class="callout-label callout-resources"><strong>RESOURCES</strong></span>')
-    $normalized = [regex]::Replace($normalized, $storyPattern, '<p class="callout-heading callout-story"><strong>PERSONAL STORY</strong></p>')
-    $normalized = [regex]::Replace($normalized, $ambiguityPattern, '> <span class="callout-label callout-ambiguity"><strong>AMBIGUITY</strong></span><br>')
+
+    $normalized = [regex]::Replace($normalized, $tipInnerPattern, $tipReplacement)
+    $normalized = [regex]::Replace($normalized, $tipOuterPattern, $tipReplacement)
+    $normalized = [regex]::Replace($normalized, $resourcesInnerPattern, $resourcesReplacement)
+    $normalized = [regex]::Replace($normalized, $resourcesOuterPattern, $resourcesReplacement)
+    $normalized = [regex]::Replace($normalized, $storyInnerPattern, $storyReplacement)
+    $normalized = [regex]::Replace($normalized, $storyOuterPattern, $storyReplacement)
+    $normalized = [regex]::Replace($normalized, $ambiguityPattern, $ambiguityReplacement)
+
     if ($normalized -ne $source) {
         [System.IO.File]::WriteAllText($fullFile, $normalized, $utf8NoBom)
     }
@@ -128,9 +148,9 @@ if ($inputs.Count -lt 2) {
 
 # Kindle-friendly CSS. Callout colors are deliberately dark and moderately
 # saturated so they remain legible on color e-ink; text labels preserve meaning
-# on monochrome devices. The EPUB navigation document uses ordered-list markup
-# by specification, so the TOC rules explicitly suppress list markers and rely
-# on indentation/weight instead of Kindle's misleading auto-numbering.
+# on monochrome devices. Ordinary blockquotes are intentionally borderless: the
+# source uses them for many consecutive prose paragraphs, and a generic border
+# creates a distracting forest of vertical rules on Kindle.
 $css = @'
 body {
   line-height: 1.45;
@@ -149,20 +169,20 @@ img {
   max-width: 100%;
   height: auto;
 }
+
+/* Keep quotations visually distinct without drawing a rule beside every
+   paragraph. This is especially important in section 1.2.3, where several
+   consecutive paragraphs are authored as blockquotes. */
 blockquote {
-  margin-left: 0;
-  margin-right: 0;
-  padding-left: 0.8em;
-  border-left: 0.18em solid currentColor;
+  margin-left: 0.7em;
+  margin-right: 0.2em;
+  padding-left: 0;
+  border: 0;
 }
-.callout-label,
-.callout-heading {
+
+.callout-label {
   font-weight: bold;
-  letter-spacing: 0.04em;
-}
-.callout-heading {
-  margin-top: 1em;
-  margin-bottom: 0.4em;
+  letter-spacing: 0.02em;
 }
 .callout-tip {
   color: #2f6b3c;
@@ -175,6 +195,15 @@ blockquote {
 }
 .callout-ambiguity {
   color: #8b3a3a;
+}
+
+/* The source occasionally makes an entire sentence an external hyperlink.
+   Kindle's default underline then turns the whole sentence into a heavy rule.
+   Keep links clickable but use restrained color instead of full underlining. */
+a,
+a:visited {
+  color: #2f5f8f;
+  text-decoration: none;
 }
 
 /* Kindle-friendly table of contents.
@@ -312,5 +341,6 @@ Write-Host "Done:" -ForegroundColor Green
 Write-Host $Output
 Write-Host "Cover: contents/images/mlib-cover.png"
 Write-Host "TOC: 3 levels, Kindle-safe unnumbered navigation"
+Write-Host "Callouts: paired emoji normalized for Kindle"
 Write-Host ""
 Write-Host "Next: upload the EPUB at https://www.amazon.com/sendtokindle"

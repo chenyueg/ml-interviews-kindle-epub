@@ -71,10 +71,10 @@ $files = $files | Select-Object -Unique
 # Kindle fonts render these as tofu boxes. Normalize the known callout families
 # to semantic plain-text labels and use color only as an enhancement. The labels
 # still carry all meaning on monochrome devices.
-$tree = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F333))      # tree
-$wave = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F30A))      # water wave
-$person = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F471))    # blond person
-$warning = [regex]::Escape([System.Char]::ConvertFromUtf32(0x26A0))    # warning sign
+$tree = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F333))       # tree
+$wave = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F30A))       # water wave
+$person = [regex]::Escape([System.Char]::ConvertFromUtf32(0x1F471))     # blond person
+$warning = [regex]::Escape([System.Char]::ConvertFromUtf32(0x26A0))     # warning sign
 
 $tipPattern = '(?m)^>\s*' + $tree + '\s*\*\*Tip\*\*\s*' + $tree + '\s*<br>\s*$'
 $resourcesPattern = '(?m)^>\s*' + $wave + '\s*\*\*Resources\*\*\s*' + $wave + '\s*$'
@@ -126,9 +126,11 @@ if ($inputs.Count -lt 2) {
     throw "Could not determine book chapter order from SUMMARY.md."
 }
 
-# Kindle-friendly CSS. Colors are deliberately dark and moderately saturated so
-# they remain legible on color e-ink. On monochrome devices, the explicit text
-# labels and typography still distinguish every callout without relying on hue.
+# Kindle-friendly CSS. Callout colors are deliberately dark and moderately
+# saturated so they remain legible on color e-ink; text labels preserve meaning
+# on monochrome devices. The EPUB navigation document uses ordered-list markup
+# by specification, so the TOC rules explicitly suppress list markers and rely
+# on indentation/weight instead of Kindle's misleading auto-numbering.
 $css = @'
 body {
   line-height: 1.45;
@@ -173,6 +175,74 @@ blockquote {
 }
 .callout-ambiguity {
   color: #8b3a3a;
+}
+
+/* Kindle-friendly table of contents.
+   EPUB3 navigation is structurally an ordered list, but these numbers are not
+   the book's chapter numbers. Force list items to ordinary blocks so Kindle
+   cannot display misleading 1, 2, 3... markers beside titles that already
+   contain their own 1.1 / 2.3 / 5.2 numbering. */
+nav#toc {
+  margin: 0;
+  padding: 0;
+}
+nav#toc > h1 {
+  margin: 0 0 0.8em 0;
+  padding-bottom: 0.3em;
+  border-bottom: 0.08em solid #777777;
+  font-size: 1.8em;
+  page-break-before: avoid;
+}
+nav#toc ol,
+nav#toc li {
+  display: block;
+  list-style: none !important;
+  list-style-type: none !important;
+  margin: 0;
+  padding: 0;
+}
+nav#toc li::marker {
+  content: "" !important;
+  font-size: 0;
+}
+nav#toc a,
+nav#toc a:visited {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  line-height: 1.3;
+}
+
+/* Level 1: Introduction, Part I, Part II, Appendix. */
+nav#toc > ol > li {
+  margin-top: 0.9em;
+}
+nav#toc > ol > li > a {
+  color: #2f5f8f;
+  font-size: 1.08em;
+  font-weight: bold;
+}
+
+/* Level 2: chapters and introduction subsections. */
+nav#toc > ol > li > ol {
+  margin-left: 0.9em;
+}
+nav#toc > ol > li > ol > li {
+  margin-top: 0.45em;
+}
+nav#toc > ol > li > ol > li > a {
+  font-weight: bold;
+}
+
+/* Level 3: numbered sections such as 1.1, 2.3, 5.2. */
+nav#toc > ol > li > ol > li > ol {
+  margin-left: 1em;
+}
+nav#toc > ol > li > ol > li > ol > li {
+  margin-top: 0.28em;
+}
+nav#toc > ol > li > ol > li > ol > li > a {
+  font-weight: normal;
 }
 '@
 $cssPath = Join-Path $work "kindle.css"
@@ -221,6 +291,7 @@ $args = @(
     "--metadata=title:Machine Learning Interviews",
     "--metadata=author:Chip Huyen",
     "--metadata=language:en-US",
+    "--metadata=toc-title:Contents",
     "--css=$cssPath",
     "--resource-path=$resourcePath",
     "--output=$Output"
@@ -240,5 +311,6 @@ Write-Host ""
 Write-Host "Done:" -ForegroundColor Green
 Write-Host $Output
 Write-Host "Cover: contents/images/mlib-cover.png"
+Write-Host "TOC: 3 levels, Kindle-safe unnumbered navigation"
 Write-Host ""
 Write-Host "Next: upload the EPUB at https://www.amazon.com/sendtokindle"

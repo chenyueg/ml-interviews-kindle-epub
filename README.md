@@ -59,6 +59,8 @@ Then upload the resulting EPUB with [Amazon Send to Kindle](https://www.amazon.c
 - includes each source directory in Pandoc's resource path so local images resolve correctly;
 - converts LaTeX math to EPUB3 MathML;
 - uses a small temporary Pandoc Lua filter to normalize multiline display equations;
+- normalizes the original tree-emoji Tip markers to plain `TIP` labels so they render cleanly on both color and monochrome Kindle models;
+- styles blockquotes with a simple current-color left border, requiring neither emoji fonts nor color support;
 - adds conservative reflowable CSS suitable for Kindle;
 - retains the original book title and author metadata.
 
@@ -76,6 +78,11 @@ Pandoc resolving `images/...` relative to the repository root instead of the
 Markdown files under `contents/`. The math warnings were caused by EPUB output
 not explicitly using MathML plus a few display equations containing bare LaTeX
 line breaks.
+
+If `Tip` headings appeared with square "tofu" boxes on Kindle, those boxes were
+the original tree emoji characters. The current build replaces only that Tip
+marker with a plain-text label and uses typography plus a left border for the
+callout instead.
 
 Some unusual formulas may still render differently after Amazon's Kindle
 conversion, but ordinary fractions, matrices, and multiline equations should be
